@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "builds": [
+    { "src": "api/get-checklist.js", "use": "@vercel/node" }
+  ],
+  "routes": [
+    { "src": "/get-checklist", "dest": "api/get-checklist.js" }
+  ]
+}
+
