@@ -5,14 +5,20 @@ from dotenv import load_dotenv
 import replicate
 import os
 
-# Load environment variables
+# Load environment variables (for local testing)
 load_dotenv()
+
+# Get Replicate API token
 REPLICATE_API_TOKEN = os.getenv("REPLICATE_API_TOKEN")
 if not REPLICATE_API_TOKEN:
     raise RuntimeError("REPLICATE_API_TOKEN not found in environment variables.")
 
+replicate_client = replicate.Client(api_token=REPLICATE_API_TOKEN)
+
+# Set up FastAPI app
 app = FastAPI()
 
+# Allow CORS (for mobile frontend)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -20,17 +26,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Define input schema
 class Query(BaseModel):
     question: str
     session_id: str
 
+# Define analyze endpoint
 @app.post("/analyze")
 async def analyze(query: Query):
     prompt = f"You are a helpful legal assistant. A user says: {query.question}"
 
     try:
+        # Use LLaMA 2 70B chat model (no hardcoded version)
         output = replicate.run(
-            "meta/llama-2-70b-chat:5b5b12b5f8e8c5363982df4e6ac2c0b8b77130a0f1540a0c040b27d5dfb3b1be",
+            "meta/llama-2-70b-chat",
             input={
                 "prompt": prompt,
                 "max_new_tokens": 500,
