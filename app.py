@@ -39,7 +39,7 @@ async def analyze(query: Query):
     try:
         # Use Mixtral 8x7B (stable public instruct model)
 output = replicate.run(
-    "mistralai/mixtral-8x7b-instruct-v0.1",
+    "mistralai/mixtral-8x7b-instruct-v0.1",  # ✅ Working model
     input={
         "prompt": prompt,
         "max_new_tokens": 500,
