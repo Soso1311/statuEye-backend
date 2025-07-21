@@ -5,20 +5,19 @@ from dotenv import load_dotenv
 import replicate
 import os
 
-# Load environment variables (for local testing)
 load_dotenv()
 
-# Get Replicate API token
 REPLICATE_API_TOKEN = os.getenv("REPLICATE_API_TOKEN")
 if not REPLICATE_API_TOKEN:
     raise RuntimeError("REPLICATE_API_TOKEN not found in environment variables.")
 
+# Initialize Replicate client
 replicate_client = replicate.Client(api_token=REPLICATE_API_TOKEN)
 
-# Set up FastAPI app
+# FastAPI app setup
 app = FastAPI()
 
-# Allow CORS (for mobile frontend)
+# CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -26,28 +25,28 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Define input schema
+# Input schema
 class Query(BaseModel):
     question: str
     session_id: str
 
-# Define analyze endpoint
+# POST /analyze endpoint
 @app.post("/analyze")
 async def analyze(query: Query):
-    prompt = f"You are a helpful legal assistant. A user says: {query.question}"
-
     try:
-        # Use Mixtral 8x7B (stable public instruct model)
-output = replicate.run(
-    "mistralai/mixtral-8x7b-instruct-v0.1",  # ✅ Working model
-    input={
-        "prompt": prompt,
-        "max_new_tokens": 500,
-        "temperature": 0.7
-    }
-)
+        prompt = query.question
+
+        output = replicate.run(
+            "meta/llama-2-70b-chat:8bb2f8f2b8c646f8b3e4f2c62f16373693164f4cbaf0c1dcab6aa87fdf6f68b3",
+            input={
+                "prompt": prompt,
+                "temperature": 0.7,
+                "max_new_tokens": 500,
+                "system_prompt": "You are a helpful legal assistant."
+            }
+        )
 
         return {"response": "".join(output)}
-
+    
     except Exception as e:
         return {"error": f"Model call failed: {str(e)}"}
