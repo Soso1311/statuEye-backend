@@ -37,9 +37,9 @@ async def analyze(query: Query):
     prompt = f"You are a helpful legal assistant. A user says: {query.question}"
 
     try:
-        # Use LLaMA 2 70B chat model (no hardcoded version)
+        # Use Mixtral 8x7B (stable public instruct model)
         output = replicate.run(
-            "meta/llama-2-70b-chat",
+            "mistralai/mixtral-8x7b-instruct-v0.1",
             input={
                 "prompt": prompt,
                 "max_new_tokens": 500,
