@@ -11,8 +11,6 @@ REPLICATE_API_TOKEN = os.getenv("REPLICATE_API_TOKEN")
 if not REPLICATE_API_TOKEN:
     raise RuntimeError("REPLICATE_API_TOKEN not found in environment variables.")
 
-replicate_client = replicate.Client(api_token=REPLICATE_API_TOKEN)
-
 app = FastAPI()
 
 app.add_middleware(
@@ -31,9 +29,8 @@ async def analyze(query: Query):
     prompt = f"You are a helpful legal assistant. A user says: {query.question}"
 
     try:
-        # Use Mixtral model with correct API call format
         output = replicate.run(
-            "mistralai/mixtral-8x7b-instruct-v0.1:latest",
+            "meta/llama-2-70b-chat:5b5b12b5f8e8c5363982df4e6ac2c0b8b77130a0f1540a0c040b27d5dfb3b1be",
             input={
                 "prompt": prompt,
                 "max_new_tokens": 500,
