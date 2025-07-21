@@ -37,12 +37,12 @@ async def analyze(query: Query):
         prompt = query.question
 
         output = replicate.run(
-            "meta/llama-2-70b-chat:8bb2f8f2b8c646f8b3e4f2c62f16373693164f4cbaf0c1dcab6aa87fdf6f68b3",
+            "meta/meta-llama-3-70b-instruct:84f6a9d99b7d1a44a9b3e032116d7e7b118755a0b1984e3d45f44b02560b46d9",
             input={
-                "prompt": prompt,
+                "prompt": f"You are a helpful legal assistant. A user asks: {prompt}",
                 "temperature": 0.7,
-                "max_new_tokens": 500,
-                "system_prompt": "You are a helpful legal assistant."
+                "top_p": 0.9,
+                "max_new_tokens": 500
             }
         )
 
@@ -50,3 +50,4 @@ async def analyze(query: Query):
     
     except Exception as e:
         return {"error": f"Model call failed: {str(e)}"}
+
