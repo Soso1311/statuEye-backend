@@ -38,14 +38,14 @@ async def analyze(query: Query):
 
     try:
         # Use Mixtral 8x7B (stable public instruct model)
-        output = replicate.run(
-            "mistralai/mixtral-8x7b-instruct-v0.1",
-            input={
-                "prompt": prompt,
-                "max_new_tokens": 500,
-                "temperature": 0.7
-            }
-        )
+output = replicate.run(
+    "mistralai/mixtral-8x7b-instruct-v0.1",
+    input={
+        "prompt": prompt,
+        "max_new_tokens": 500,
+        "temperature": 0.7
+    }
+)
 
         return {"response": "".join(output)}
 
