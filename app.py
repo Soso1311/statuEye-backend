@@ -30,11 +30,23 @@ class Query(BaseModel):
 @app.post("/analyze")
 async def analyze(query: Query):
     prompt = f"You are a helpful legal assistant. A user says: {query.question}"
+
     try:
-        output = replicate_client.run(
-            "mistralai/mistral-7b-instruct-v0.1",
-            input={"prompt": prompt, "max_new_tokens": 500}
+        version = replicate_client.models.get(
+            "mistralai/mistral-7b-instruct-v0.1"
+        ).versions.get(
+            "db21a4393b670408a8d8b5fa781e5d21c8629f1810967ac74e37a3a26e26183b"
         )
+
+        output = version.predict(
+            input={
+                "prompt": prompt,
+                "max_new_tokens": 500,
+                "temperature": 0.7
+            }
+        )
+
         return {"response": "".join(output)}
+
     except Exception as e:
         return {"error": f"Model call failed: {str(e)}"}
