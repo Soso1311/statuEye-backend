@@ -1,56 +1,57 @@
-# app.py
-
 from fastapi import FastAPI
-from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from dotenv import load_dotenv
 import httpx
 import os
 
-# 🔒 Load your Together API key from environment
+# Load environment variables
+load_dotenv()
 TOGETHER_API_KEY = os.getenv("TOGETHER_API_KEY")
 
-# 🌍 FastAPI app
+# FastAPI app
 app = FastAPI()
 
-# 🔐 CORS (allow frontend)
+# Allow CORS for frontend/mobile access
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Replace with specific domain in production
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# 🧠 Temporary in-memory session store
-session_memory = {}
-
-# 📦 Request format
+# Request model
 class AnalyzeRequest(BaseModel):
     question: str
     session_id: str
-    jurisdiction: str = "England and Wales"
+    jurisdiction: str = "England and Wales"  # Default if not provided
+
+@app.get("/")
+def read_root():
+    return {"message": "Statueye backend is live!"}
 
 @app.post("/analyze")
-async def analyze_question(req: AnalyzeRequest):
-    # ⏪ Fetch session history or start new
-    history = session_memory.get(req.session_id, [])
-    history.append(f"User: {req.question}")
+async def analyze_question(request: AnalyzeRequest):
+    prompt = f"""You are a professional legal assistant AI trained in UK law. 
+You must answer legal questions factually, like a solicitor.
 
-    # 🧠 Combine memory into prompt
-    memory_prompt = "\n".join(history)
-    full_prompt = f"""
-You are a helpful legal assistant for UK law.
+If a crime is mentioned, DO NOT provide moral guidance or judgment (e.g. "turn yourself in").
+Instead, clearly explain:
+- What law applies
+- The exact section or quote from UK legislation (if available)
+- The legal consequences and penalties
+- What the person can expect (e.g. charges, jail time, fines)
 
-Jurisdiction: {req.jurisdiction}
+Always begin your answer with:
+"The [Act Name] states: '[exact quoted text from the law]'."
 
-Chat history:
-{memory_prompt}
+If no law applies, say "No applicable UK law found."
 
-Respond with clear legal advice, and always cite the actual law like:
-"The [Act Name] states: '[exact legal quote]'."
+Here is the user's question:
+\"{request.question}\"
 
-Then explain what it means and what the user should do next.
-If unsure, say so honestly.
+Jurisdiction: {request.jurisdiction}
 """
 
     headers = {
@@ -58,28 +59,24 @@ If unsure, say so honestly.
         "Content-Type": "application/json"
     }
 
-    payload = {
+    data = {
         "model": "mistral-7b-instruct",
-        "prompt": full_prompt,
+        "prompt": prompt,
         "max_tokens": 800,
         "temperature": 0.7
     }
 
     try:
         async with httpx.AsyncClient() as client:
-            res = await client.post(
+            response = await client.post(
                 "https://api.together.xyz/v1/completions",
                 headers=headers,
-                json=payload
+                json=data
             )
-            res.raise_for_status()
-            data = res.json()
-            answer = data["choices"][0]["text"].strip()
+
+        response_json = response.json()
+        ai_text = response_json["choices"][0]["text"].strip()
+        return {"response": ai_text}
+
     except Exception as e:
         return {"error": f"Model call failed: {str(e)}"}
-
-    # 💾 Update session memory
-    history.append(f"AI: {answer}")
-    session_memory[req.session_id] = history[-6:]  # Keep last 3 turns
-
-    return {"response": answer}
