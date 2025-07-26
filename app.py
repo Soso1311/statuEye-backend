@@ -20,7 +20,7 @@ class Query(BaseModel):
     session_id: str
 
 # Load API key from env
-together_api_key = os.getenv("c09e7c90e1732762833e76d19f4d79cc5b97eec1177ab35ccf24039994fa0122")
+together_api_key = os.getenv("TOGETHER_API_KEY")
 client = Together(api_key=together_api_key)
 
 @app.post("/analyze")
