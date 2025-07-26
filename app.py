@@ -1,71 +1,70 @@
 from fastapi import FastAPI, Request
+from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-import requests
+import httpx
 import os
+
+TOGETHER_API_KEY = os.getenv("TOGETHER_API_KEY")
 
 app = FastAPI()
 
-# Allow all frontend origins (you can restrict this later)
+# CORS settings
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  # Set to frontend URL in production
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# ✅ Load Together API key from environment
-TOGETHER_API_KEY = os.getenv("TOGETHER_API_KEY")
+# Define the request body
+class AnalyzeRequest(BaseModel):
+    question: str
+    session_id: str
+    jurisdiction: str = "England and Wales"  # default
 
-# ✅ Root route
 @app.get("/")
 def read_root():
-    return {"message": "Statueye backend is live"}
+    return {"message": "Statueye backend is live!"}
 
-# ✅ Main AI analysis route
 @app.post("/analyze")
-async def analyze(request: Request):
+async def analyze_question(request: AnalyzeRequest):
+    prompt = f"""You are a legal assistant AI for UK law. A user has asked:
+
+"{request.question}"
+
+Jurisdiction: {request.jurisdiction}
+
+Answer with clear legal advice and **always cite the relevant law** like:
+
+"The [Act Name] states: '[exact quoted law]'."
+
+Then briefly explain what it means and what the user should do next.
+Only cite real UK laws — if unsure, say so honestly."""
+
+    headers = {
+        "Authorization": f"Bearer {TOGETHER_API_KEY}",
+        "Content-Type": "application/json"
+    }
+
+    data = {
+        "model": "mistral-7b-instruct",
+        "prompt": prompt,
+        "max_tokens": 800,
+        "temperature": 0.7
+    }
+
     try:
-        data = await request.json()
-        question = data.get("question")
-        session_id = data.get("session_id", "default-session")
-
-        if not question:
-            return JSONResponse(content={"error": "Missing question"}, status_code=400)
-
-        # ✅ Call Together AI (chat model)
-        headers = {
-            "Authorization": f"Bearer {TOGETHER_API_KEY}",
-            "Content-Type": "application/json"
-        }
-
-        payload = {
-            "model": "mistralai/Mistral-7B-Instruct-v0.1",
-            "messages": [
-                {"role": "system", "content": "You are a helpful UK legal assistant."},
-                {"role": "user", "content": question}
-            ],
-            "temperature": 0.7,
-            "top_p": 0.7,
-            "max_tokens": 512
-        }
-
-        response = requests.post(
-            "https://api.together.xyz/v1/chat/completions",
-            headers=headers,
-            json=payload
-        )
-
-        if response.status_code != 200:
-            return JSONResponse(
-                content={"error": f"Model call failed: {response.text}"},
-                status_code=500
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                "https://api.together.xyz/v1/completions",
+                headers=headers,
+                json=data
             )
 
-        result = response.json()
-        answer = result['choices'][0]['message']['content']
-
-        return {"response": answer}
+        response_json = response.json()
+        ai_text = response_json["choices"][0]["text"].strip()
+        return {"response": ai_text}
 
     except Exception as e:
-        return JSONResponse(content={"error": str(e)}, status_code=500)
+        return {"error": f"Model call failed: {str(e)}"}
