@@ -1,12 +1,12 @@
-import os
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from together import Together
+from fastapi.responses import JSONResponse
+import requests
+import os
 
 app = FastAPI()
 
-# Allow frontend to connect
+# Allow all frontend origins (you can restrict this later)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -14,33 +14,58 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Input model
-class Query(BaseModel):
-    question: str
-    session_id: str
+# ✅ Load Together API key from environment
+TOGETHER_API_KEY = os.getenv("TOGETHER_API_KEY")
 
-# Load API key from env
-together_api_key = os.getenv("TOGETHER_API_KEY")
-client = Together(api_key=together_api_key)
+# ✅ Root route
+@app.get("/")
+def read_root():
+    return {"message": "Statueye backend is live"}
 
+# ✅ Main AI analysis route
 @app.post("/analyze")
-async def analyze(query: Query):
-    prompt = (
-        "You are a helpful UK legal assistant. The user says:\n"
-        f"{query.question}\n\n"
-        "Please:\n"
-        "1. Explain any laws involved\n"
-        "2. List penalties (if any)\n"
-        "3. Suggest next steps\n\n"
-        "Use clear, kind language."
-    )
-
+async def analyze(request: Request):
     try:
-        response = await client.chat.completions.create(
-            model="deepseek-ai/DeepSeek-R1",
-            messages=[{"role": "user", "content": prompt}],
-            stream=False
+        data = await request.json()
+        question = data.get("question")
+        session_id = data.get("session_id", "default-session")
+
+        if not question:
+            return JSONResponse(content={"error": "Missing question"}, status_code=400)
+
+        # ✅ Call Together AI (chat model)
+        headers = {
+            "Authorization": f"Bearer {TOGETHER_API_KEY}",
+            "Content-Type": "application/json"
+        }
+
+        payload = {
+            "model": "mistralai/Mistral-7B-Instruct-v0.1",
+            "messages": [
+                {"role": "system", "content": "You are a helpful UK legal assistant."},
+                {"role": "user", "content": question}
+            ],
+            "temperature": 0.7,
+            "top_p": 0.7,
+            "max_tokens": 512
+        }
+
+        response = requests.post(
+            "https://api.together.xyz/v1/chat/completions",
+            headers=headers,
+            json=payload
         )
-        return {"response": response.choices[0].message.content}
+
+        if response.status_code != 200:
+            return JSONResponse(
+                content={"error": f"Model call failed: {response.text}"},
+                status_code=500
+            )
+
+        result = response.json()
+        answer = result['choices'][0]['message']['content']
+
+        return {"response": answer}
+
     except Exception as e:
-        return {"error": f"Model call failed: {str(e)}"}
+        return JSONResponse(content={"error": str(e)}, status_code=500)
