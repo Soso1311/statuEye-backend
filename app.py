@@ -3,97 +3,87 @@ from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 import httpx
 import os
-from typing import Dict, List
 
-# Load Together API key
 TOGETHER_API_KEY = os.getenv("TOGETHER_API_KEY")
 
 app = FastAPI()
 
-# CORS setup
+# CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # update in prod
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Request model
+# In-memory chat history
+chat_sessions = {}
+
+# Request body
 class AnalyzeRequest(BaseModel):
     question: str
     session_id: str
     jurisdiction: str = "England and Wales"
 
-# Memory store
-conversations: Dict[str, List[Dict[str, str]]] = {}
-
-# Root route
 @app.get("/")
 def read_root():
-    return {"message": "Statueye backend is live with memory!"}
+    return {"message": "Statueye backend with memory is live!"}
 
-# Analyze route with memory
 @app.post("/analyze")
 async def analyze_question(request: AnalyzeRequest):
-    session_id = request.session_id
-    question = request.question
-    jurisdiction = request.jurisdiction
+    # Use or create chat history
+    if request.session_id not in chat_sessions:
+        chat_sessions[request.session_id] = []
 
-    # Start new conversation if needed
-    if session_id not in conversations:
-        conversations[session_id] = []
+    # Append user question
+    chat_sessions[request.session_id].append({"role": "user", "content": request.question})
 
-    # Add user message
-    conversations[session_id].append({
-        "role": "user",
-        "content": question
-    })
+    # Build full prompt
+    chat_history = "\n".join(
+        f"{entry['role'].capitalize()}: {entry['content']}"
+        for entry in chat_sessions[request.session_id]
+    )
 
-    # System prompt
-    system_prompt = {
-        "role": "system",
-        "content": (
-            f"You are a legal assistant for UK law. Always cite UK laws exactly like this:\n"
-            f"The [Act Name] states: \"...\".\n"
-            f"You're advising a user in the {jurisdiction} jurisdiction. Keep answers clear, helpful, and accurate. "
-            f"If unsure, say so clearly. Only follow up if absolutely needed."
-        )
-    }
+    prompt = f"""You are a helpful legal assistant AI with deep knowledge of UK law.
 
-    # Full message history
-    full_messages = [system_prompt] + conversations[session_id]
+Jurisdiction: {request.jurisdiction}
 
-    # Together.ai chat request
+Chat History:
+{chat_history}
+
+Now, based on the above, continue the conversation. 
+If the user hasn't given enough detail, ask a short, useful follow-up question.
+Always cite laws like: 'The [Act Name] states: "[quoted section]"' where appropriate.
+Be concise, clear, and helpful."""
+
     headers = {
         "Authorization": f"Bearer {TOGETHER_API_KEY}",
         "Content-Type": "application/json"
     }
 
-    payload = {
-        "model": "mistralai/Mixtral-8x7B-Instruct-v0.1",
-        "messages": full_messages,
+    data = {
+        "model": "mistral-7b-instruct",
+        "prompt": prompt,
         "max_tokens": 800,
         "temperature": 0.7
     }
 
     try:
         async with httpx.AsyncClient() as client:
-            res = await client.post(
-                "https://api.together.xyz/v1/chat/completions",
+            response = await client.post(
+                "https://api.together.xyz/v1/completions",
                 headers=headers,
-                json=payload
+                json=data
             )
-        data = res.json()
-        ai_response = data["choices"][0]["message"]["content"].strip()
 
-        # Save AI response in memory
-        conversations[session_id].append({
-            "role": "assistant",
-            "content": ai_response
-        })
+        response_json = response.json()
+        ai_text = response_json["choices"][0]["text"].strip()
 
-        return {"response": ai_response}
+        # Add AI response to memory
+        chat_sessions[request.session_id].append({"role": "assistant", "content": ai_text})
+
+        return {"response": ai_text}
 
     except Exception as e:
         return {"error": f"Model call failed: {str(e)}"}
