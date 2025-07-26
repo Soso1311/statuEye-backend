@@ -37,7 +37,3 @@ async def analyze(query: Query):
         return {"response": "".join(output)}
     except Exception as e:
         return {"error": f"Model call failed: {str(e)}"}
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8000)
