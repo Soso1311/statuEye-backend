@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-TOGETHER_API_KEY = os.getenv("TOGETHER_API_KEY")
+TOGETHER_API_KEY = os.getenv("c09e7c90e1732762833e76d19f4d79cc5b97eec1177ab35ccf24039994fa0122")
 
 app = FastAPI()
 
