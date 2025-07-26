@@ -1,20 +1,12 @@
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from dotenv import load_dotenv
-import replicate
-import os
-
-load_dotenv()
-
-REPLICATE_API_TOKEN = os.getenv("REPLICATE_API_TOKEN")
-if not REPLICATE_API_TOKEN:
-    raise RuntimeError("REPLICATE_API_TOKEN not found in environment variables.")
-
-replicate_client = replicate.Client(api_token=REPLICATE_API_TOKEN)
+from together import Together
 
 app = FastAPI()
 
+# Allow frontend to connect
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -22,26 +14,33 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Input model
 class Query(BaseModel):
     question: str
     session_id: str
 
+# Load API key from env
+together_api_key = os.getenv("TOGETHER_API_KEY")
+client = Together(api_key=together_api_key)
+
 @app.post("/analyze")
 async def analyze(query: Query):
+    prompt = (
+        "You are a helpful UK legal assistant. The user says:\n"
+        f"{query.question}\n\n"
+        "Please:\n"
+        "1. Explain any laws involved\n"
+        "2. List penalties (if any)\n"
+        "3. Suggest next steps\n\n"
+        "Use clear, kind language."
+    )
+
     try:
-        prompt = f"You are a helpful legal assistant. A user asks: {query.question}"
-
-        output = replicate.run(
-            "meta/meta-llama-3-70b-instruct",
-            input={
-                "prompt": prompt,
-                "temperature": 0.7,
-                "top_p": 0.9,
-                "max_new_tokens": 500
-            }
+        response = await client.chat.completions.create(
+            model="deepseek-ai/DeepSeek-R1",
+            messages=[{"role": "user", "content": prompt}],
+            stream=False
         )
-
-        return {"response": "".join(output)}
-
+        return {"response": response.choices[0].message.content}
     except Exception as e:
         return {"error": f"Model call failed: {str(e)}"}
