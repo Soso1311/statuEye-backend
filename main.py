@@ -1,39 +1,49 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from dotenv import load_dotenv
-import replicate
+import requests
 import os
+from dotenv import load_dotenv
 
 load_dotenv()
 
-REPLICATE_API_TOKEN = os.getenv("REPLICATE_API_TOKEN")
-if not REPLICATE_API_TOKEN:
-    raise RuntimeError("REPLICATE_API_TOKEN not found in environment variables.")
-
-replicate_client = replicate.Client(api_token=REPLICATE_API_TOKEN)
+TOGETHER_API_KEY = os.getenv("TOGETHER_API_KEY")
 
 app = FastAPI()
 
+# CORS for frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  # you can restrict this to your domain
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-class Query(BaseModel):
+class QuestionRequest(BaseModel):
     question: str
-    session_id: str
+    session_id: str = "default"
 
 @app.post("/analyze")
-async def analyze(query: Query):
-    prompt = f"You are a helpful legal assistant. A user says: {query.question}"
-    try:
-        output = replicate_client.run(
-            "mistralai/mistral-7b-instruct-v0.1",
-            input={"prompt": prompt, "max_new_tokens": 500}
-        )
-        return {"response": "".join(output)}
-    except Exception as e:
-        return {"error": f"Model call failed: {str(e)}"}
+async def analyze_question(req: QuestionRequest):
+    headers = {
+        "Authorization": f"Bearer {TOGETHER_API_KEY}",
+        "Content-Type": "application/json"
+    }
+
+    payload = {
+        "model": "mistralai/Mixtral-8x7B-Instruct-v0.1",
+        "prompt": f"You are a UK legal expert AI. Answer this legal question like a human lawyer would:\n\nQuestion: {req.question}\n\nAnswer:",
+        "max_tokens": 512,
+        "temperature": 0.7,
+        "top_p": 0.9,
+    }
+
+    res = requests.post("https://api.together.xyz/v1/completions", headers=headers, json=payload)
+
+    if res.status_code != 200:
+        return {"error": f"Model call failed: {res.text}"}
+
+    data = res.json()
+    answer = data.get("choices", [{}])[0].get("text", "").strip()
+    return {"answer": answer}
