@@ -11,7 +11,6 @@ OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
 app = FastAPI()
 
-# CORS settings
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -47,7 +46,7 @@ User Question: "{req.question}"
 
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-        "HTTP-Referer": "https://statueye.com",  # optional but professional
+        "HTTP-Referer": "https://statueye.com",
         "Content-Type": "application/json"
     }
 
