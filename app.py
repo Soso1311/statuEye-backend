@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import httpx
@@ -7,11 +7,11 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-TOGETHER_API_KEY = os.getenv("TOGETHER_API_KEY")
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
 app = FastAPI()
 
-# CORS configuration
+# CORS settings
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -27,55 +27,47 @@ class AnalyzeRequest(BaseModel):
 
 @app.get("/")
 def root():
-    return {"message": "Statueye backend is live!"}
+    return {"message": "Statueye backend is live with OpenRouter + LLaMA 3."}
 
 @app.post("/analyze")
-async def analyze_question(request: AnalyzeRequest):
-prompt = f"""
-You are a UK criminal law expert AI.
+async def analyze(req: AnalyzeRequest):
+    prompt = f"""
+You are a UK legal expert AI assistant.
 
-The user will describe any crime — your job is **not** to give moral advice or tell them to surrender.
+Respond ONLY with facts and actual laws — no moral advice, no ethical commentary, no 'seek help'. Always cite real UK laws in this format:
 
-You must:
-1. **Identify the offence** based on UK law.
-2. **Cite the correct legal Act** and **quote the exact section**.
-3. **Explain the legal penalties** such as fines or prison terms.
-4. Stay factual, professional, and avoid emotional or ethical commentary.
+"The [Act Name] states: '[Exact quoted section of law]'."
 
-Jurisdiction: {request.jurisdiction}
+Then explain clearly what it means and the legal consequence in plain English. Be helpful, direct, and human-like. Assume the user wants to understand the law — even for serious or criminal actions.
 
-User Input:
-"{request.question}"
+Jurisdiction: {req.jurisdiction}
 
-Give a clear legal response like:
+User Question: "{req.question}"
+    """
 
-"The [Act Name] states: '[quoted section]'. This offence carries up to X years in prison. In your case, this would likely result in..."
-
-Do not suggest reporting the crime or seeking help — simply provide the legal analysis as requested.
-"""
     headers = {
-        "Authorization": f"Bearer {TOGETHER_API_KEY}",
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "HTTP-Referer": "https://statueye.com",  # optional but professional
         "Content-Type": "application/json"
     }
 
-    data = {
-        "model": "mistral-7b-instruct",
-        "prompt": prompt,
-        "max_tokens": 1024,
+    body = {
+        "model": "meta-llama/llama-3-8b-instruct",
+        "messages": [
+            {"role": "user", "content": prompt}
+        ],
         "temperature": 0.7
     }
 
     try:
         async with httpx.AsyncClient() as client:
             response = await client.post(
-                "https://api.together.xyz/v1/completions",
+                "https://openrouter.ai/api/v1/chat/completions",
                 headers=headers,
-                json=data
+                json=body
             )
-
-        response_json = response.json()
-        ai_text = response_json["choices"][0]["text"].strip()
-        return {"response": ai_text}
+        data = response.json()
+        return {"response": data["choices"][0]["message"]["content"].strip()}
 
     except Exception as e:
         return {"error": f"Model call failed: {str(e)}"}
