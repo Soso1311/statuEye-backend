@@ -4,25 +4,32 @@ from fastapi.middleware.cors import CORSMiddleware
 import httpx
 import os
 
-# Load OpenRouter API key from Railway environment variables
+# Load OpenRouter API key from Railway environment variable
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
 app = FastAPI()
 
-# Enable CORS for frontend
+# Enable CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  # Replace with frontend domain in production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# Define input model
 class AnalyzeRequest(BaseModel):
     question: str
     session_id: str
     jurisdiction: str = "England"
 
+# Root route
+@app.get("/")
+def read_root():
+    return {"message": "Statueye backend running with OpenRouter"}
+
+# Analyze route
 @app.post("/analyze")
 async def analyze_question(request: AnalyzeRequest):
     prompt = f"""
@@ -44,7 +51,7 @@ Do NOT moralize. Just explain the legal consequences and penalties.
     }
 
     payload = {
-        "model": "mistralai/mistral-7b-instruct:free",  # you can swap to another free model
+        "model": "mistralai/mistral-7b-instruct:free",  # Free, fast, no filter
         "messages": [
             {"role": "system", "content": "You are a UK legal expert AI."},
             {"role": "user", "content": prompt}
