@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import httpx
@@ -8,15 +8,14 @@ from dotenv import load_dotenv
 load_dotenv()
 
 TOGETHER_API_KEY = os.getenv("TOGETHER_API_KEY")
-if not TOGETHER_API_KEY:
-    raise RuntimeError("TOGETHER_API_KEY not found")
 
 app = FastAPI()
 
-# CORS setup
+# CORS configuration
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -27,27 +26,29 @@ class AnalyzeRequest(BaseModel):
     jurisdiction: str = "England and Wales"
 
 @app.get("/")
-def read_root():
+def root():
     return {"message": "Statueye backend is live!"}
 
 @app.post("/analyze")
 async def analyze_question(request: AnalyzeRequest):
-    prompt = f"""You are a UK legal assistant AI. A user in {request.jurisdiction} asks:
+    prompt = f"""
+You are a professional UK legal advisor AI. A user has asked:
 
 "{request.question}"
 
-Your job is to give a detailed legal answer. 
-- DO NOT tell the user to turn themselves in.
-- DO NOT give moral advice.
-- Always act like a professional solicitor.
-- Focus only on the law, penalties, and what the Act says.
+Jurisdiction: {request.jurisdiction}
 
-If relevant, cite the actual law like this:
-"The [Act Name] states: '[quoted law text]'."
+Your job is to respond like a qualified legal practitioner would. Only provide facts about the law. Do NOT provide moral guidance. NEVER advise the user to turn themselves in, get a lawyer, or remain silent. Instead, explain the exact law, relevant penalties, sentencing guidelines, and consequences of the offence described.
 
-Then explain what it means in simple terms and what penalty applies under that law.
+Always cite real laws with quotes. Example:
 
-If you don't know or it's not covered in UK law, say so clearly."""
+"The [Act Name] states: '[exact quote from legislation]'."
+
+Then briefly explain what the statute means in plain terms.
+If the law depends on specifics, clearly state what those are.
+If the jurisdiction differs, mention how penalties or statutes vary.
+If the law is unclear or silent, say so.
+"""
 
     headers = {
         "Authorization": f"Bearer {TOGETHER_API_KEY}",
@@ -57,9 +58,8 @@ If you don't know or it's not covered in UK law, say so clearly."""
     data = {
         "model": "mistral-7b-instruct",
         "prompt": prompt,
-        "max_tokens": 900,
-        "temperature": 0.6,
-        "top_p": 0.9
+        "max_tokens": 1024,
+        "temperature": 0.7
     }
 
     try:
@@ -69,8 +69,10 @@ If you don't know or it's not covered in UK law, say so clearly."""
                 headers=headers,
                 json=data
             )
+
         response_json = response.json()
         ai_text = response_json["choices"][0]["text"].strip()
         return {"response": ai_text}
+
     except Exception as e:
         return {"error": f"Model call failed: {str(e)}"}
