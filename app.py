@@ -1,16 +1,15 @@
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from fastapi.middleware.cors import CORSMiddleware
 import httpx
 import os
-from dotenv import load_dotenv
 
-load_dotenv()
-
+# Load OpenRouter API key from Railway environment variables
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
 app = FastAPI()
 
+# Enable CORS for frontend
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -22,51 +21,46 @@ app.add_middleware(
 class AnalyzeRequest(BaseModel):
     question: str
     session_id: str
-    jurisdiction: str = "England and Wales"
-
-@app.get("/")
-def root():
-    return {"message": "Statueye backend is live with OpenRouter + LLaMA 3."}
+    jurisdiction: str = "England"
 
 @app.post("/analyze")
-async def analyze(req: AnalyzeRequest):
+async def analyze_question(request: AnalyzeRequest):
     prompt = f"""
-You are a UK legal expert AI assistant.
+You are a UK criminal defence solicitor AI. Respond like a professional human lawyer.
 
-Respond ONLY with facts and actual laws — no moral advice, no ethical commentary, no 'seek help'. Always cite real UK laws in this format:
+User: "{request.question}"
+Jurisdiction: {request.jurisdiction}
 
-"The [Act Name] states: '[Exact quoted section of law]'."
+Always reply with a clear legal explanation, including full quotes from UK legislation like:
 
-Then explain clearly what it means and the legal consequence in plain English. Be helpful, direct, and human-like. Assume the user wants to understand the law — even for serious or criminal actions.
+"The [Act Name] states: '[exact quote]'."
 
-Jurisdiction: {req.jurisdiction}
-
-User Question: "{req.question}"
-    """
+Do NOT moralize. Just explain the legal consequences and penalties.
+"""
 
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-        "HTTP-Referer": "https://statueye.com",
         "Content-Type": "application/json"
     }
 
-    body = {
-        "model": "meta-llama/llama-3-8b-instruct",
+    payload = {
+        "model": "mistralai/mistral-7b-instruct:free",  # you can swap to another free model
         "messages": [
+            {"role": "system", "content": "You are a UK legal expert AI."},
             {"role": "user", "content": prompt}
         ],
-        "temperature": 0.7
+        "temperature": 0.7,
+        "max_tokens": 800
     }
 
     try:
         async with httpx.AsyncClient() as client:
-            response = await client.post(
-                "https://openrouter.ai/api/v1/chat/completions",
-                headers=headers,
-                json=body
-            )
-        data = response.json()
-        return {"response": data["choices"][0]["message"]["content"].strip()}
+            res = await client.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload)
+
+        res.raise_for_status()
+        result = res.json()
+        answer = result["choices"][0]["message"]["content"]
+        return {"answer": answer}
 
     except Exception as e:
         return {"error": f"Model call failed: {str(e)}"}
