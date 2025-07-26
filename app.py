@@ -32,7 +32,7 @@ async def analyze(query: Query):
         prompt = f"You are a helpful legal assistant. A user asks: {query.question}"
 
         output = replicate.run(
-            "meta/meta-llama-3-70b-instruct:84f6a9d99b7d1a44a9b3e032116d7e7b118755a0b1984e3d45f44b02560b46d9",
+            "meta/meta-llama-3-70b-instruct",
             input={
                 "prompt": prompt,
                 "temperature": 0.7,
