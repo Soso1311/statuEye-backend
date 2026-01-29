@@ -1,49 +1,76 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-import requests
+import httpx
 import os
-from dotenv import load_dotenv
-
-load_dotenv()
-
-TOGETHER_API_KEY = os.getenv("TOGETHER_API_KEY")
+import redis
+from typing import Optional
 
 app = FastAPI()
 
 # CORS for frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # you can restrict this to your domain
+    allow_origins=["*"],  # Replace with your domain in production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-class QuestionRequest(BaseModel):
+# Define input model
+class AnalyzeRequest(BaseModel):
     question: str
     session_id: str = "default"
 
+# Redis Connection
+redis_client = redis.Redis(host='localhost', port=6379, db=0)  # Adjust as needed
+
+# Define a simple prompt – highly focused
+prompt = """
+You are a legal assistant AI.  A user asks:
+
+"{question}"
+
+Respond with the **most relevant legal concept or phrase** related to the question, without lengthy explanations or legal advice.
+
+If no legal concept is apparent, respond with "No legal concept found."
+"""
+
+
 @app.post("/analyze")
-async def analyze_question(req: QuestionRequest):
+async def analyze_question(req: AnalyzeRequest):
+    cache_key = f"legal_analysis:{req.session_id}:{req.question}"
+
+    # Check cache
+    cached_result = redis_client.get(cache_key)
+    if cached_result:
+        return {"answer": cached_result.decode("utf-8")}
+
+    # Call Together AI
     headers = {
-        "Authorization": f"Bearer {TOGETHER_API_KEY}",
         "Content-Type": "application/json"
     }
-
     payload = {
-        "model": "mistralai/Mixtral-8x7B-Instruct-v0.1",
-        "prompt": f"You are a UK legal expert AI. Answer this legal question like a human lawyer would:\n\nQuestion: {req.question}\n\nAnswer:",
-        "max_tokens": 512,
-        "temperature": 0.7,
-        "top_p": 0.9,
+        "model": "mistralai/mixtral-8x7b-instruct-v0.1",
+        "messages": [
+            {"role": "system", "content": "You are a legal assistant AI."},
+            {"role": "user", "content": prompt.format(question=req.question)}
+        ],
+        "temperature": 0.0, # Keep low for fast responses
+        "max_tokens": 128  # Limit token usage significantly
     }
 
-    res = requests.post("https://api.together.xyz/v1/completions", headers=headers, json=payload)
+    try:
+        response = await httpx.post("https://api.together.xyz/v1/completions", headers=headers, json=payload)
+        response.raise_for_status()
+        result = response.json()
+        answer = result["choices"][0]["message"]["content"].strip()
 
-    if res.status_code != 200:
-        return {"error": f"Model call failed: {res.text}"}
+        # Store in cache
+        redis_client.setex(cache_key, 600, answer)  # Cache for 10 minutes
 
-    data = res.json()
-    answer = data.get("choices", [{}])[0].get("text", "").strip()
-    return {"answer": answer}
+        return {"answer": answer}
+
+    except Exception as e:
+        print(f"Error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to analyze question")
