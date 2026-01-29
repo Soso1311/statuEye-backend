@@ -1,4 +1,10 @@
 {
-  "start": "uvicorn app:app --host 0.0.0.0 --port $PORT"
+  "version": 2,
+  "build": {
+    "command": "npm install && npm run build",
+    "host": "localhost",
+    "port": 3000,
+    "subprocess": true,
+    "wait_until": "ready"
+  }
 }
-
