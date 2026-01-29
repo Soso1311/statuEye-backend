@@ -1,10 +1,12 @@
 {
   "version": 2,
   "builds": [
-    { "src": "api/get-checklist.js", "use": "@vercel/node" }
+    {
+      "src": "main.py",
+      "use": "@vercel/python"
+    }
   ],
-  "routes": [
-    { "src": "/get-checklist", "dest": "api/get-checklist.js" }
-  ]
+  "project": "main",
+  "name": "legal-ai-app",
+  "region": "gcp"
 }
-
