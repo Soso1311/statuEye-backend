@@ -1,5 +1,5 @@
 fastapi
 uvicorn
-replicate
-together
+httpx
+redis
 python-dotenv
